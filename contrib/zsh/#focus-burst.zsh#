@@ -1,0 +1,41 @@
+# source this from ~/.zshrc if you want the Ctrl-B burst
+_fb_os="$(uname -s)"
+
+
+
+_fb_list_pids_in_pgid() { ps -o pid= --pgroup "$1" 2>/dev/null | awk '{print $1}'; }
+
+_fb_boost_pid() {
+  if [[ "$_fb_os" == "Darwin" ]]; then
+    command -v taskpolicy >/dev/null && taskpolicy -p -g user_interactive "$1" 2>/dev/null || true
+    renice -5 -p "$1" >/dev/null 2>&1 || true
+  else
+    renice -5 -p "$1" >/dev/null 2>&1 || true
+    command -v ionice >/dev/null 2>&1 && ionice -c2 -n0 -p "$1" >/dev/null 2>&1 || true
+  fi
+}
+
+_fb_revert_pid() {
+  if [[ "$_fb_os" == "Darwin" ]]; then
+    command -v taskpolicy >/dev/null && taskpolicy -p -g user_initiated "$1" 2>/dev/null || true
+    renice 0 -p "$1" >/dev/null 2>&1 || true
+  else
+    renice 0 -p "$1" >/dev/null 2>&1 || true
+    command -v ionice >/dev/null 2>&1 && ionice -c2 -n4 -p "$1" >/dev/null 2>&1 || true
+  fi
+}
+
+focus-burst() {
+  local job="${1:-%+}"
+  local line pid pgid
+  line="$(jobs -l "$job" 2>/dev/null | head -n1)" || { echo "No such job: $job"; return 1; }
+  pid="$(printf "%s\n" "$line" | awk '{print $2}')"
+  [[ -z "$pid" ]] && { echo z"Could not parse PID for $job"; return 1; }
+  pgid="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ')" || return 1
+  local p
+  for p in $(_fb_list_pids_in_pgid "$pgid"); do _fb_boost_pid "$p"; done
+  ( sleep 1; for p in $(_fb_list_pids_in_pgid "$pgid"); do _fb_revert_pid "$p"; done ) >/dev/null 2>&1 &
+}
+
+# Ctrl-B: suspend → burst → resume
+bindkey -s '^B' '^Zfocus-burst %+\nfg\n'

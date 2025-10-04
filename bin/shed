@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OS="$(uname -s)"
+
+usage() {
+  cat <<'EOF'
+shed — quick, cross-platform priority/QoS shim (macOS + Linux)
+
+USAGE:
+  shed {bg|work|focus} <proc-name|command ...>
+  shed bump <pid>
+  shed version
+
+NOTES:
+  - If you pass a single word and it matches running processes, shed treats it
+    as a pattern and applies to those PIDs (pgrep -f). Otherwise it runs a command
+    in the requested class.
+  - On macOS uses: taskpolicy (+ renice)
+  - On Linux uses: systemd-run --user --scope (+ nice/ionice fallback)
+
+EXAMPLES:
+  shed bg pm2
+  shed bg cloudflared
+  shed focus npm install
+  shed bump 12345
+EOF
+}
+
+is_pattern() {
+  # "pm2" -> true, "/usr/bin/pm2" -> false, "npm install" -> false
+  [[ $# -eq 1 && "$1" != /* && "$1" != */* && "$1" != -* ]]
+}
+
+mac_apply_pattern_bg() {
+  local patt="$1"
+  pgrep -f "$patt" | while read -r pid; do
+    taskpolicy -p -b "$pid" 2>/dev/null || sudo taskpolicy -p -b "$pid" || true
+    renice +10 -p "$pid" >/dev/null 2>&1 || true
+  done
+}
+
+mac_apply_pattern_qos() {
+  local qos="$1"; shift
+  local patt="$1"
+  pgrep -f "$patt" | while read -r pid; do
+    taskpolicy -p -g "$qos" "$pid" 2>/dev/null || sudo taskpolicy -p -g "$qos" "$pid" || true
+    [[ "$qos" == "user_interactive" ]] && renice -5 -p "$pid" >/dev/null 2>&1 || true
+  done
+}
+
+linux_apply_pattern() {
+  local nic="$1"; shift
+  local ion="$1"; shift
+  local patt="$1"
+  pgrep -f "$patt" | while read -r pid; do
+    renice "$nic" -p "$pid" >/dev/null 2>&1 || true
+    if command -v ionice >/dev/null 2>&1; then
+      case "$ion" in
+        hi) ionice -c2 -n0 -p "$pid" >/dev/null 2>&1 ;;
+        md) ionice -c2 -n4 -p "$pid" >/dev/null 2>&1 ;;
+        lo) ionice -c3       -p "$pid" >/div/null 2>&1 || ionice -c3 -p "$pid" >/dev/null 2>&1 ;;
+      esac
+    fi
+  done
+}
+
+run_linux_scope() {
+  local cpuw="$1"; shift
+  local iow="$1"; shift
+  if command -v systemd-run >/dev/null 2>&1; then
+    exec systemd-run --user -p "CPUWeight=${cpuw}" -p "IOWeight=${iow}" --scope "$@"
+  else
+    # fallback: try ionice + nice
+    if [[ "$cpuw" -ge 800 ]]; then nicev=-5; ion=hi
+    elif [[ "$cpuw" -le 300 ]]; then nicev=+10; ion=lo
+    else nicev=0; ion=md
+    fi
+    if command -v ionice >/dev/null 2>&1; then
+      case "$ion" in
+        hi) ionice_arg=(ionice -c2 -n0) ;;
+        lo) ionice_arg=(ionice -c3) ;;
+        *)  ionice_arg=(ionice -c2 -n4) ;;
+      esac
+    else
+      ionice_arg=()
+    fi
+    exec nice "$nicev" "${ionice_arg[@]}" "$@"
+  fi
+}
+
+case "${1-}" in
+  -h|--help|"") usage; exit 0 ;;
+  version) echo "shed 0.1.0"; exit 0 ;;
+esac
+
+mode="$1"; shift
+
+case "$OS" in
+  Darwin)
+    case "$mode" in
+      bg)
+        if is_pattern "$@"; then mac_apply_pattern_bg "$1"
+        else exec taskpolicy -b -d "$@"
+        fi
+        ;;
+      work)
+        if is_pattern "$@"; then mac_apply_pattern_qos user_initiated "$1"
+        else exec taskpolicy -g user_initiated "$@"
+        fi
+        ;;
+      focus)
+        if is_pattern "$@"; then mac_apply_pattern_qos user_interactive "$1"
+        else exec taskpolicy -g user_interactive "$@"
+        fi
+        ;;
+      bump)
+        pid="${1:?need a pid}"
+        taskpolicy -p -g user_interactive "$pid" 2>/dev/null || sudo taskpolicy -p -g user_interactive "$pid" || true
+        renice -5 -p "$pid" >/dev/null 2>&1 || true
+        ;;
+      *) usage; exit 1 ;;
+    esac
+    ;;
+
+  Linux)
+    case "$mode" in
+      bg)
+        if is_pattern "$@"; then linux_apply_pattern +10 lo "$1"
+        else run_linux_scope 200 100 "$@"
+        fi
+        ;;
+      work)
+        if is_pattern "$@"; then linux_apply_pattern 0 md "$1"
+        else run_linux_scope 700 700 "$@"
+        fi
+        ;;
+      focus)
+        if is_pattern "$@"; then linux_apply_pattern -5 hi "$1"
+        else run_linux_scope 900 900 "$@"
+        fi
+        ;;
+      bump)
+        pid="${1:?need a pid}"
+        renice -5 -p "$pid" >/dev/null 2>&1 || true
+        command -v ionice >/dev/null 2>&1 && ionice -c2 -n0 -p "$pid" >/dev/null 2>&1 || true
+        ;;
+      *) usage; exit 1 ;;
+    esac
+    ;;
+
+  *)
+    echo "shed: unsupported OS: $OS" >&2; exit 2 ;;
+esac
