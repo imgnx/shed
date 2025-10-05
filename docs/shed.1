@@ -1,0 +1,51 @@
+.TH SHED 1 "October 2025" "shed 0.1.1" "User Commands"
+.SH NAME
+shed \- quick, cross\-platform priority/QoS shim (macOS + Linux)
+.SH SYNOPSIS
+.B shed
+{bg|work|focus} \fIproc\-pattern\fR
+.br
+.B shed
+{bg|work|focus} \fIcommand ...\fR
+.br
+.B shed
+bump \fIpid\fR
+.br
+.B shed
+version
+.SH DESCRIPTION
+\fBshed\fR provides human\-friendly control over process priority and QoS classes
+on macOS and Linux by wrapping native tools.
+.PP
+On macOS it uses \fBtaskpolicy\fR (and \fBrenice\fR); on Linux it prefers
+\fBsystemd\-run\fR transient scopes with CPU/IO weights and falls back to
+\fBnice\fR/\fBionice\fR when systemd is unavailable.
+.SH MODES
+.TP
+.B bg
+Deprioritize a matching process group or run a command in background tier.
+.TP
+.B work
+Run at normal/interactive\-initiated tier.
+.TP
+.B focus
+Run at interactive tier for responsiveness.
+.TP
+.B bump \fIpid\fR
+Temporarily boost an existing process by PID.
+.SH NOTES
+If invoked with a single word that matches a running process (via \fBpgrep\fR \-f),
+\fBshed\fR treats it as a process pattern; otherwise, it treats arguments as a command to run.
+.SH EXAMPLES
+.EX
+shed bg pm2
+shed focus npm install
+shed bump 12345
+.EE
+.SH EXIT STATUS
+Returns 0 on success; non\-zero on error. Unsupported OS returns 2.
+.SH SEE ALSO
+\fBtaskpolicy\fR(1), \fBrenice\fR(8), \fBsystemd\-run\fR(1), \fBnice\fR(1), \fBionice\fR(1)
+.SH AUTHOR
+MIT License. See the project repository for details.
+

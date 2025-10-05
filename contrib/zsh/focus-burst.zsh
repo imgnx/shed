@@ -79,9 +79,8 @@ focus-burst() {
           sleep 0.2
           elapsed=$(printf '%.3f' "$(printf '%s %s\n' "$elapsed" 0.2 | awk '{printf $1+$2}')")
         done
-        ;;``
+        ;;
       pulse)
-        # Ensure a minimum window even if first off happens quickly
         local on="$pulse_on" off="$pulse_off"
         sleep "$min_win"; elapsed="$min_win"
         while :; do
@@ -104,7 +103,7 @@ focus-burst() {
         "$(date '+%Y-%m-%d %H:%M:%S')" "$pgid" "$mode" "$min_win" "$max_win" "$idle_thresh" "$pulse_on" "$pulse_off" "$elapsed" "$cycles" "$pulses"
     } >>"$log_file" 2>/dev/null
   ) &
-}``
+}
 
 # Ctrl-B: suspend → burst (adaptive pulse) → resume
 bindkey -s '^B' '^Zfocus-burst --pulse %+\\nfg\\n'

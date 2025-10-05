@@ -59,7 +59,7 @@ linux_apply_pattern() {
       case "$ion" in
         hi) ionice -c2 -n0 -p "$pid" >/dev/null 2>&1 ;;
         md) ionice -c2 -n4 -p "$pid" >/dev/null 2>&1 ;;
-        lo) ionice -c3       -p "$pid" >/div/null 2>&1 || ionice -c3 -p "$pid" >/dev/null 2>&1 ;;
+        lo) ionice -c3       -p "$pid" >/dev/null 2>&1 || ionice -c3 -p "$pid" >/dev/null 2>&1 ;;
       esac
     fi
   done
@@ -78,20 +78,19 @@ run_linux_scope() {
     fi
     if command -v ionice >/dev/null 2>&1; then
       case "$ion" in
-        hi) ionice_arg=(ionice -c2 -n0) ;;
-        lo) ionice_arg=(ionice -c3) ;;
-        *)  ionice_arg=(ionice -c2 -n4) ;;
+        hi) exec nice -n "$nicev" ionice -c2 -n0 "$@" ;;
+        lo) exec nice -n "$nicev" ionice -c3       "$@" ;;
+        *)  exec nice -n "$nicev" ionice -c2 -n4 "$@" ;;
       esac
     else
-      ionice_arg=()
+      exec nice -n "$nicev" "$@"
     fi
-    exec nice "$nicev" "${ionice_arg[@]}" "$@"
   fi
 }
 
 case "${1-}" in
   -h|--help|"") usage; exit 0 ;;
-  version) echo "shed 0.1.0"; exit 0 ;;
+  version) echo "shed 0.1.1"; exit 0 ;;
 esac
 
 mode="$1"; shift

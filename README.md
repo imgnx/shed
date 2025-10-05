@@ -18,6 +18,8 @@ chmod +x bin/shed
 sudo ln -sf "$PWD/bin/shed" /usr/local/bin/shed
 # (optional) Zsh helper
 echo "source $PWD/contrib/zsh/focus-burst.zsh" >> ~/.zshrc
+ # (optional) completions + man page via installer
+ PREFIX=/usr/local bash install.sh
 ```
 
 ## Usage
@@ -34,6 +36,14 @@ shed bump 12345         # temporarily boost a PID
 - **Commands**: otherwise, runs the provided command under the mode.
 - **Linux systemd**: if available, uses a transient scope with CPU/IO weights.
 - **Fallbacks**: Linux w/o systemd → `nice`/`ionice`. macOS → QoS via `taskpolicy`.
+
+### Shell completions
+- Bash: installs to `$PREFIX/share/bash-completion/completions/shed`
+- Zsh: installs to `$PREFIX/share/zsh/site-functions/_shed`
+- Fish: installs to `$PREFIX/share/fish/vendor_completions.d/shed.fish`
+
+### Man page
+If `$PREFIX/share/man/man1` exists, `install.sh` installs `docs/shed.1.gz`.
 
 ## UNRESTRICTIONS
 
@@ -63,3 +73,25 @@ Existing tools exist but aren’t unified or ergonomic. **shed** glues them toge
 
 ## License
 MIT — see [LICENSE](LICENSE).
+
+## Development
+- Tests: `make test`
+- Lint (optional): `make lint` (uses `shellcheck` if available)
+- Install locally: `make install` (respects `PREFIX`, defaults to `/usr/local`)
+
+### Running tests
+Tests are plain shell scripts in `tests/`. The runner executes any `test_*.sh`.
+
+```sh
+make test
+```
+
+### Contributing
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Changelog
+See [CHANGELOG.md](CHANGELOG.md).
+
+### Packaging
+- Homebrew (tap): create a formula pointing at a release tarball and install to `/usr/local/bin`. See `install.sh` for completions/manpage paths.
+- Debian/apt: package `bin/shed` to `/usr/bin/shed`, include `docs/shed.1`, and install completions under standard locations.

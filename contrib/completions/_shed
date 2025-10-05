@@ -1,0 +1,47 @@
+#compdef shed
+
+_shed() {
+  local -a subcmds
+  subcmds=(
+    'bg:deprioritize pattern or run command'
+    'work:normal tier for pattern or command'
+    'focus:interactive tier for pattern or command'
+    'bump:temporarily boost a PID'
+    'version:show version'
+    'help:show help'
+  )
+
+  local context state state_descr line curcontext="$curcontext"
+
+  _arguments -C \
+    '1:command:->cmds' \
+    '*::args:->args' && return
+
+  case $state in
+    cmds)
+      _describe -t commands 'shed command' subcmds && return
+      ;;
+    args)
+      case $words[1] in
+        bump)
+          # complete PIDs
+          local -a pids
+          pids=(${(f)"$(ps -o pid= -ax 2>/dev/null)"})
+          _describe -t processes 'pid' pids
+          ;;
+        bg|work|focus)
+          # complete process names
+          local -a procs
+          procs=(${(u)${(f)"$(ps -o comm= -ax 2>/dev/null)"}})
+          _describe -t processes 'proc' procs
+          ;;
+        *)
+          _message 'arguments'
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_shed "$@"
+
